@@ -43,23 +43,33 @@ jobs:
           composer create-project laravel/laravel:^13.0 laravel_scaffold --prefer-dist --no-interaction
           cd laravel_scaffold
           composer require inertiajs/inertia-laravel --no-interaction
-          npm install react react-dom @inertiajs/react @vitejs/plugin-react typescript --save
+          npm install react react-dom @inertiajs/react @vitejs/plugin-react typescript @types/react @types/react-dom --save
           php artisan --version
           composer show laravel/framework
           composer show inertiajs/inertia-laravel
           rm -f .env database/database.sqlite
 
-      - name: Package PHP runtime
+      - name: Package bounded PHP runtime support
         shell: bash
         run: |
           set -euo pipefail
           php_bin="$(readlink -f "$(command -v php)")"
-          php_root="$(dirname "$(dirname "$php_bin")")"
-          mkdir -p php_runtime
-          cp -a "$php_root"/. php_runtime/
+          ext_dir="$(php-config --extension-dir)"
+          mkdir -p php_runtime/bin php_runtime/extensions php_runtime/lib
+          cp "$php_bin" php_runtime/bin/php
+          cp -a "$ext_dir"/*.so php_runtime/extensions/
           cp "$(command -v composer)" composer
           "$php_bin" -m > php_runtime/modules.txt
           "$php_bin" -v > php_runtime/version.txt
+          php-config --extension-dir > php_runtime/extension-dir.txt
+          : > php_runtime/ldd.txt
+          for target in "$php_bin" "$ext_dir"/*.so; do
+            echo "### $target" >> php_runtime/ldd.txt
+            ldd "$target" >> php_runtime/ldd.txt || true
+          done
+          awk '/=> \/.* \(/ {print $3} /^\// {print $1}' php_runtime/ldd.txt | sort -u | while read -r lib; do
+            [ -f "$lib" ] && cp -Ln "$lib" php_runtime/lib/ || true
+          done
 
       - name: Package PostgreSQL runtime binaries
         shell: bash
@@ -67,15 +77,17 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql postgresql-client
-          pg_config --version
           pg_bindir="$(pg_config --bindir)"
           pg_root="$(dirname "$pg_bindir")"
           pg_sharedir="$(pg_config --sharedir)"
-          mkdir -p postgresql_runtime postgresql_runtime/share
+          mkdir -p postgresql_runtime postgresql_runtime/share postgresql_runtime/deps
           cp -a "$pg_root"/. postgresql_runtime/
           cp -a "$pg_sharedir"/. postgresql_runtime/share/
           ldd "$pg_bindir/postgres" > postgresql_runtime/postgres-ldd.txt
           pg_config --version > postgresql_runtime/version.txt
+          awk '/=> \/.* \(/ {print $3} /^\// {print $1}' postgresql_runtime/postgres-ldd.txt | sort -u | while read -r lib; do
+            [ -f "$lib" ] && cp -Ln "$lib" postgresql_runtime/deps/ || true
+          done
 
       - name: Upload bootstrap bundle
         uses: actions/upload-artifact@v4
@@ -86,6 +98,7 @@ jobs:
           compression-level: 6
           include-hidden-files: true
           path: |
+            sentinelops_source
             laravel_scaffold
             php_runtime
             composer
