@@ -45,7 +45,21 @@ jobs:
           composer require inertiajs/inertia-laravel --no-interaction
           npm install react react-dom @inertiajs/react @vitejs/plugin-react typescript --save
           php artisan --version
-          composer show laravel/framework inertiajs/inertia-laravel
+          composer show laravel/framework
+          composer show inertiajs/inertia-laravel
+          rm -f .env database/database.sqlite
+
+      - name: Package PHP runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          php_bin="$(readlink -f "$(command -v php)")"
+          php_root="$(dirname "$(dirname "$php_bin")")"
+          mkdir -p php_runtime
+          cp -a "$php_root"/. php_runtime/
+          cp "$(command -v composer)" composer
+          "$php_bin" -m > php_runtime/modules.txt
+          "$php_bin" -v > php_runtime/version.txt
 
       - name: Package PostgreSQL runtime binaries
         shell: bash
@@ -55,8 +69,11 @@ jobs:
           sudo apt-get install -y postgresql postgresql-client
           pg_config --version
           pg_bindir="$(pg_config --bindir)"
-          mkdir -p postgresql_runtime/bin
-          cp -a "$pg_bindir"/. postgresql_runtime/bin/
+          pg_root="$(dirname "$pg_bindir")"
+          pg_sharedir="$(pg_config --sharedir)"
+          mkdir -p postgresql_runtime postgresql_runtime/share
+          cp -a "$pg_root"/. postgresql_runtime/
+          cp -a "$pg_sharedir"/. postgresql_runtime/share/
           ldd "$pg_bindir/postgres" > postgresql_runtime/postgres-ldd.txt
           pg_config --version > postgresql_runtime/version.txt
 
@@ -67,7 +84,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 6
+          include-hidden-files: true
           path: |
             laravel_scaffold
+            php_runtime
+            composer
             postgresql_runtime
             HARNESS_SHA
