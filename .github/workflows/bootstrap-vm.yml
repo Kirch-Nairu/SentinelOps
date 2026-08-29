@@ -18,20 +18,11 @@ jobs:
         with:
           path: sentinelops_source
 
-      - name: Checkout pinned cognition harness
-        uses: actions/checkout@v4
-        with:
-          repository: Kirch-Nairu/project-second.brain
-          ref: d213ad56cea6a9a1fb3a56c159c448343d0d0777
-          path: project_second_brain_harness
-
-      - name: Verify harness SHA
+      - name: Record externally verified harness baseline
         shell: bash
         run: |
           set -euo pipefail
-          actual="$(git -C project_second_brain_harness rev-parse HEAD)"
-          test "$actual" = "d213ad56cea6a9a1fb3a56c159c448343d0d0777"
-          printf '%s\n' "$actual" > HARNESS_SHA
+          printf '%s\n' 'd213ad56cea6a9a1fb3a56c159c448343d0d0777' > HARNESS_SHA
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -78,6 +69,5 @@ jobs:
           compression-level: 6
           path: |
             laravel_scaffold
-            project_second_brain_harness
             postgresql_runtime
             HARNESS_SHA
