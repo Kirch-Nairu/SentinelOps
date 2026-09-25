@@ -1,0 +1,83 @@
+name: SentinelOps CI
+
+on:
+  push:
+    branches:
+      - KIRCH-HARNESS-PILOT-SENTINELOPS-V1
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sentinelops_test
+          POSTGRES_USER: sentinelops
+          POSTGRES_PASSWORD: sentinelops-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinelops -d sentinelops_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: false
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: sentinelops_test
+      DB_USERNAME: sentinelops
+      DB_PASSWORD: sentinelops-ci
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          extensions: mbstring, xml, ctype, curl, dom, fileinfo, filter, hash, openssl, pcre, pdo, tokenizer, pgsql, pdo_pgsql
+          coverage: none
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Prepare application
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+
+      - name: Backend tests
+        run: php artisan test --colors=always
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production frontend build
+        run: npm run build
